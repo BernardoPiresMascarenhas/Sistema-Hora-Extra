@@ -128,3 +128,28 @@
     @apply font-sans;
   }
 }
+
+/* Customização da barra de rolagem para o tema escuro */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;               /* Largura da barra vertical */
+  height: 6px;              /* Altura da barra horizontal */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #09090b;      /* Cor de fundo da pista (zinc-950) */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #27272a;      /* Cor do escorregador (zinc-800) */
+  border-radius: 9999px;    /* Deixa as pontas arredondadas */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;      /* Cor quando passa o mouse (zinc-700) */
+}
+
+/* Suporte para navegadores como Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a #09090b;
+}

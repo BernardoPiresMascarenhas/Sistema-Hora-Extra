@@ -22,15 +22,29 @@ export async function login(formData: FormData) {
   // 🧹 Limpa o cache do Next.js inteiro para forçar a troca de layout
   revalidatePath("/", "layout");
   
-  // Redireciona para o painel
+  // 🚀 Redirecionamento inteligente!
+  // Se for a conta do caixa, joga direto para a tela de vendas.
+  if (email === "caixa@horaextra.com") {
+    redirect("/pdv");
+  }
+
+  // Se for o dono (ou qualquer outro), vai pro painel financeiro.
   redirect("/dashboard");
 }
 
-export async function logout() {
+// 🔍 Função nova: Busca o e-mail para a Sidebar esconder os menus
+export async function getEmailUsuario() {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  return data.user?.email;
+}
+
+// 🚪 Função única para sair limpando o cache
+export async function deslogar() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   
-  // 🧹 Limpa o cache ao sair também
+  // 🧹 Limpa o cache ao sair também para não vazar tela
   revalidatePath("/", "layout");
   redirect("/login");
 }
