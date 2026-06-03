@@ -16,6 +16,7 @@ import {
 import {
   AlertTriangle,
   TrendingUp,
+  TrendingDown,
   DollarSign,
   Receipt,
   Wallet,
@@ -47,7 +48,7 @@ export interface DashboardData {
   lucroHoje: number; 
   faturamentoMes: number;
   lucroMes: number; 
-  taxasPeriodo: number; // <--- Renomeado aqui
+  taxasPeriodo: number;
   despesasMes: number;
   lucro7dias: { dia: string; lucro: number }[];
   vendasPorMetodo: { metodo: string; valor: number }[];
@@ -106,11 +107,14 @@ export function Dashboard({ data, taxasIniciais }: DashboardProps) {
     faturamentoMes,
     lucroMes,
     custoReposicaoMes,
-    taxasPeriodo, // <--- Destruturando a variável nova
+    taxasPeriodo,
     despesasMes,
     lucro7dias,
     vendasPorMetodo,
   } = data;
+
+  // Lógica da cor do Lucro Mensal (Verde se >= 0, Vermelho se < 0)
+  const lucroMesEstaNegativo = lucroMes < 0;
 
   return (
     <div className="space-y-6">
@@ -157,8 +161,9 @@ export function Dashboard({ data, taxasIniciais }: DashboardProps) {
             icone={<DollarSign size={18} />}
           />
           <CardResumo
-            titulo="Lucro Real"
+            titulo="Lucro Líquido"
             valor={lucroHoje}
+            subtitulo="Livre de despesas adicionais" // <--- Explicando que não desconta despesa aqui
             cor="verde"
             icone={<TrendingUp size={18} />}
           />
@@ -183,10 +188,11 @@ export function Dashboard({ data, taxasIniciais }: DashboardProps) {
             icone={<DollarSign size={18} />}
           />
           <CardResumo
-            titulo="Lucro Real"
+            titulo={lucroMesEstaNegativo ? "Prejuízo Real" : "Lucro Real"}
             valor={lucroMes}
-            cor="verde"
-            icone={<TrendingUp size={18} />}
+            subtitulo="Descontando todas as despesas" // <--- Explicando que aqui desconta
+            cor={lucroMesEstaNegativo ? "vermelho" : "verde"} // <--- Dinâmico!
+            icone={lucroMesEstaNegativo ? <TrendingDown size={18} /> : <TrendingUp size={18} />} // <--- Ícone dinâmico!
           />
           <CardResumo
             titulo="CMV Total"
@@ -208,6 +214,7 @@ export function Dashboard({ data, taxasIniciais }: DashboardProps) {
           <CardResumo
             titulo="Despesas Adicionais"
             valor={despesasMes}
+            subtitulo="Gastos extras do mês (gelo, luz, etc)"
             cor="vermelho"
             icone={<Wallet size={18} />}
           />
@@ -219,7 +226,7 @@ export function Dashboard({ data, taxasIniciais }: DashboardProps) {
         <Card className="border-zinc-800 bg-zinc-950 p-5 lg:col-span-2 shadow-sm">
           <h2 className="mb-6 font-semibold text-zinc-100 flex items-center gap-2">
             <TrendingUp className="text-emerald-500" size={18} />
-            Lucro Líquido — Período Selecionado
+            Lucro Líquido Diário — Período Selecionado
           </h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={lucro7dias} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>

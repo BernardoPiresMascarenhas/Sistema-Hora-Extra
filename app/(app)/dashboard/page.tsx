@@ -70,10 +70,12 @@ export default async function DashboardPage(props: any) {
   const fimFiltroDate = new Date(`${fimStr}T23:59:59-03:00`);
   const desde = inicioMes < inicioFiltroDate ? inicioMes : inicioFiltroDate;
 
+  // Adicionamos a busca paralela de itens pendentes de reposição
   const [
     { data: vendasRaw },
     { data: produtosRaw },
     { data: despesasRaw },
+    { data: itensReporRaw }, // <--- Nova Query!
     taxasIniciais,
   ] = await Promise.all([
     supabase
@@ -87,6 +89,12 @@ export default async function DashboardPage(props: any) {
       .select("criado_em,valor")
       .gte("criado_em", desde.toISOString())
       .lte("criado_em", fimFiltroDate.toISOString()),
+    supabase
+      .from("itens_venda")
+      .select("quantidade, custo_unitario_vendido, vendas!inner(criado_em)")
+      .eq("reposto", false) // Busca apenas o que não foi apagado/reposto
+      .gte("vendas.criado_em", desde.toISOString())
+      .lte("vendas.criado_em", fimFiltroDate.toISOString()),
     getTaxas(),
   ]);
 
@@ -105,59 +113,57 @@ export default async function DashboardPage(props: any) {
     valor: Number(d.valor),
   }));
 
-  // ---------- Agregações de VENDAS ----------
   let faturamentoHoje = 0;
   let lucroVendasHoje = 0; 
   let faturamentoMes = 0;
   let lucroVendasMes = 0;
-  let custoReposicaoHoje = 0;
-  let custoReposicaoMes = 0;
-  let taxasPeriodo = 0; // <--- Alterado para computar dinamicamente pelo filtro
+  let taxasPeriodo = 0; 
   
   const porMetodo: Record<string, number> = {};
   const lucroPorDia: Record<string, number> = Object.fromEntries(diasGrafico.map((d) => [d.chave, 0]));
-  const despesasPorDia: Record<string, number> = Object.fromEntries(diasGrafico.map((d) => [d.chave, 0]));
 
   for (const v of vendas) {
-    const custoVenda = v.total_bruto - v.valor_taxa - v.lucro_liquido;
-
     if (v.quando >= inicioMes) {
       faturamentoMes += v.total_bruto;
       lucroVendasMes += v.lucro_liquido;
-      custoReposicaoMes += custoVenda;
     }
     if (v.quando >= inicioHoje) {
       faturamentoHoje += v.total_bruto;
       lucroVendasHoje += v.lucro_liquido;
-      custoReposicaoHoje += custoVenda;
     }
-    
-    // Filtro do Período do Calendário
     if (v.diaSP >= inicioStr && v.diaSP <= fimStr) {
       if (v.diaSP in lucroPorDia) {
         lucroPorDia[v.diaSP] += v.lucro_liquido;
       }
       porMetodo[v.metodo] = (porMetodo[v.metodo] ?? 0) + v.total_bruto;
-      taxasPeriodo += v.valor_taxa; // <--- A MÁGICA AQUI: Soma a taxa apenas dos dias selecionados!
+      taxasPeriodo += v.valor_taxa; 
     }
   }
 
-  for (const d of despesas) {
-    if (d.diaSP >= inicioStr && d.diaSP <= fimStr) {
-      if (d.diaSP in despesasPorDia) {
-        despesasPorDia[d.diaSP] += d.valor;
+  // CALCULO DINÂMICO DOS CARDS DE REPOSIÇÃO (Obedece ao botão de Apagar/Zerar)
+  let custoReposicaoHoje = 0;
+  let custoReposicaoMes = 0;
+
+  if (itensReporRaw) {
+    for (const item of itensReporRaw as any[]) {
+      const quandoItem = new Date(item.vendas.criado_em);
+      const custoTotalItem = Number(item.quantidade) * Number(item.custo_unitario_vendido);
+
+      if (quandoItem >= inicioMes) {
+        custoReposicaoMes += custoTotalItem;
+      }
+      if (quandoItem >= inicioHoje) {
+        custoReposicaoHoje += custoTotalItem;
       }
     }
   }
 
   let despesasMesContador = 0;
-  let despesasHojeContador = 0;
   for (const d of despesas) {
     if (d.quando >= inicioMes) despesasMesContador += d.valor;
-    if (d.quando >= inicioHoje) despesasHojeContador += d.valor;
   }
 
-  const lucroRealHoje = lucroVendasHoje - despesasHojeContador;
+  const lucroRealHoje = lucroVendasHoje; 
   const lucroRealMes = lucroVendasMes - despesasMesContador;
 
   const produtosBaixos = ((produtosRaw ?? []) as ProdutoRow[]).filter(
@@ -172,11 +178,11 @@ export default async function DashboardPage(props: any) {
     faturamentoMes: round2(faturamentoMes),
     lucroMes: round2(lucroRealMes),
     custoReposicaoMes: round2(custoReposicaoMes),
-    taxasPeriodo: round2(taxasPeriodo), // <--- Enviando a taxa móvel
+    taxasPeriodo: round2(taxasPeriodo),
     despesasMes: round2(despesasMesContador),
     lucro7dias: diasGrafico.map((d) => ({
       dia: d.dia,
-      lucro: round2((lucroPorDia[d.chave] || 0) - (despesasPorDia[d.chave] || 0)),
+      lucro: round2((lucroPorDia[d.chave] || 0)),
     })),
     vendasPorMetodo: (["Pix", "Débito", "Crédito", "Dinheiro"] as const)
       .map((m) => ({ metodo: m, valor: round2(porMetodo[m] ?? 0) }))

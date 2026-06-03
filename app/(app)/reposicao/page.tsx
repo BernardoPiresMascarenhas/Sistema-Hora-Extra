@@ -1,7 +1,9 @@
+// app/(app)/reposicao/page.tsx
 import { createClient } from "@/lib/supabase/server";
 import { PackageOpen, Repeat2, Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { FiltroData } from "@/components/dashboard/filtro-data"; 
+import { BotaoZerarItem } from "@/components/reposicao/botao-zerar-item"; 
 
 export const dynamic = "force-dynamic";
 
@@ -18,32 +20,35 @@ function ymdSP(d: Date): string {
 }
 
 interface ItemReposicao {
+  produtoId: string; // Precisamos do ID para a exclusão individual
   nome: string;
   quantidadeVendida: number;
   custoTotal: number;
 }
 
-// Usamos 'props: any' para evitar conflitos de tipagem entre versões do Next
 export default async function ReposicaoPage(props: any) {
   const supabase = await createClient();
-
-  // O SEGREDO ESTÁ AQUI: Extraímos e esperamos os parâmetros da URL
   const searchParams = await props.searchParams;
 
   const agora = new Date();
   const hojeStr = ymdSP(agora);
   
-  const inicioFiltro = searchParams?.inicio ? new Date(`${searchParams.inicio}T00:00:00-03:00`) : new Date(`${hojeStr}T00:00:00-03:00`);
-  const fimFiltro = searchParams?.fim ? new Date(`${searchParams.fim}T23:59:59-03:00`) : new Date(`${hojeStr}T23:59:59-03:00`);
+  const inicioStr = searchParams?.inicio || hojeStr;
+  const fimStr = searchParams?.fim || hojeStr;
 
-  const { data: itensRaw, error } = await supabase
+  const inicioFiltro = new Date(`${inicioStr}T00:00:00-03:00`);
+  const fimFiltro = new Date(`${fimStr}T23:59:59-03:00`);
+
+  const { data: itensRaw } = await supabase
     .from("itens_venda")
     .select(`
+      produto_id,
       quantidade,
       custo_unitario_vendido,
       produtos (nome),
       vendas!inner (criado_em)
     `)
+    .eq("reposto", false) // Filtra só o que tá devendo
     .gte("vendas.criado_em", inicioFiltro.toISOString())
     .lte("vendas.criado_em", fimFiltro.toISOString());
 
@@ -52,16 +57,18 @@ export default async function ReposicaoPage(props: any) {
 
   if (itensRaw) {
     for (const row of itensRaw as any[]) {
+      const pId = row.produto_id; // Agrupamos por ID agora
       const nomeProduto = row.produtos?.nome || "Produto Excluído";
       const qtd = Number(row.quantidade);
       const custoLinha = qtd * Number(row.custo_unitario_vendido);
 
-      if (mapaReposicao.has(nomeProduto)) {
-        const item = mapaReposicao.get(nomeProduto)!;
+      if (mapaReposicao.has(pId)) {
+        const item = mapaReposicao.get(pId)!;
         item.quantidadeVendida += qtd;
         item.custoTotal += custoLinha;
       } else {
-        mapaReposicao.set(nomeProduto, {
+        mapaReposicao.set(pId, {
+          produtoId: pId,
           nome: nomeProduto,
           quantidadeVendida: qtd,
           custoTotal: custoLinha,
@@ -82,7 +89,7 @@ export default async function ReposicaoPage(props: any) {
             Lista de Reposição
           </h1>
           <p className="text-sm text-zinc-400 mt-1">
-            Itens que saíram no período e o valor reservado para repor.
+            Itens que saíram no período e ainda não foram repostos.
           </p>
         </div>
         <FiltroData />
@@ -104,7 +111,7 @@ export default async function ReposicaoPage(props: any) {
         {listaCompras.length === 0 ? (
           <div className="p-8 text-center text-zinc-500 flex flex-col items-center gap-3">
             <Info size={24} className="text-zinc-600" />
-            <p>Nenhum produto foi vendido neste período.</p>
+            <p>Todos os itens do período já foram marcados como repostos.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -114,11 +121,12 @@ export default async function ReposicaoPage(props: any) {
                   <th className="px-6 py-4 font-medium">Produto</th>
                   <th className="px-6 py-4 font-medium text-center">Unidades Saídas</th>
                   <th className="px-6 py-4 font-medium text-right">Custo de Reposição</th>
+                  <th className="px-6 py-4 font-medium text-center w-24">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/50">
                 {listaCompras.map((item) => (
-                  <tr key={item.nome} className="hover:bg-zinc-900/30 transition-colors">
+                  <tr key={item.produtoId} className="hover:bg-zinc-900/30 transition-colors">
                     <td className="px-6 py-4 font-medium text-zinc-100">{item.nome}</td>
                     <td className="px-6 py-4 text-center">
                       <span className="bg-zinc-800 px-2.5 py-1 rounded-md text-zinc-300 font-bold">
@@ -127,6 +135,15 @@ export default async function ReposicaoPage(props: any) {
                     </td>
                     <td className="px-6 py-4 text-right font-bold text-orange-400/90">
                       {brl(item.custoTotal)}
+                    </td>
+                    <td className="px-6 py-4 flex items-center justify-center">
+                      {/* Botão de Check para cada linha */}
+                      <BotaoZerarItem
+                        produtoId={item.produtoId}
+                        nomeProduto={item.nome}
+                        inicio={inicioStr}
+                        fim={fimStr}
+                      />
                     </td>
                   </tr>
                 ))}
